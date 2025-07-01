@@ -17,37 +17,69 @@ export function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session?.user);
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      } else {
-        setLoading(false);
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        // Test Supabase connection first
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Auth session error:', error);
+          setConnectionError(`Authentication error: ${error.message}`);
+          setLoading(false);
+          return;
+        }
+
+        if (mounted) {
+          setUser(session?.user ?? null);
+          setIsAuthenticated(!!session?.user);
+          
+          if (session?.user) {
+            await fetchUserProfile(session.user.id);
+          } else {
+            setLoading(false);
+          }
+        }
+      } catch (error: any) {
+        console.error('Auth initialization error:', error);
+        if (mounted) {
+          setConnectionError(`Connection failed: ${error.message}`);
+          setLoading(false);
+        }
       }
-    });
+    };
+
+    initializeAuth();
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.email);
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session?.user);
       
-      if (session?.user) {
-        await fetchUserProfile(session.user.id);
-      } else {
-        setUserProfile(null);
-        setIsAdmin(false);
-        setLoading(false);
+      if (mounted) {
+        setUser(session?.user ?? null);
+        setIsAuthenticated(!!session?.user);
+        setConnectionError(null);
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user.id);
+        } else {
+          setUserProfile(null);
+          setIsAdmin(false);
+          setLoading(false);
+        }
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
@@ -60,6 +92,7 @@ export function useAuth() {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching user profile:', error);
+        // Don't set connection error for profile fetch issues
         setLoading(false);
         return;
       }
@@ -69,7 +102,7 @@ export function useAuth() {
         setIsAdmin(data.is_admin);
       }
       setLoading(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching user profile:', error);
       setLoading(false);
     }
@@ -77,6 +110,7 @@ export function useAuth() {
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
+      setConnectionError(null);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -89,14 +123,16 @@ export function useAuth() {
       
       console.log('Sign in successful:', data.user?.email);
       return { data, error: null };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign in exception:', error);
+      setConnectionError(`Sign in failed: ${error.message}`);
       return { data: null, error };
     }
   };
 
   const signUpWithEmail = async (email: string, password: string, name: string) => {
     try {
+      setConnectionError(null);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -128,14 +164,16 @@ export function useAuth() {
 
       console.log('Sign up successful:', data.user?.email);
       return { data, error: null };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign up exception:', error);
+      setConnectionError(`Sign up failed: ${error.message}`);
       return { data: null, error };
     }
   };
 
   const signInWithGoogle = async () => {
     try {
+      setConnectionError(null);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -149,8 +187,9 @@ export function useAuth() {
       }
       
       return { data, error: null };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google sign in exception:', error);
+      setConnectionError(`Google sign in failed: ${error.message}`);
       return { data: null, error };
     }
   };
@@ -163,9 +202,10 @@ export function useAuth() {
         setUserProfile(null);
         setIsAuthenticated(false);
         setIsAdmin(false);
+        setConnectionError(null);
       }
       return { error };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign out error:', error);
       return { error };
     }
@@ -186,6 +226,7 @@ export function useAuth() {
     isAuthenticated,
     isAdmin,
     loading,
+    connectionError,
     signInWithEmail,
     signUpWithEmail,
     signInWithGoogle,

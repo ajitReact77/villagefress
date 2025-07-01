@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Mail, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,7 +8,7 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, connectionError } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -86,6 +86,43 @@ function AuthPage() {
   const onBack = () => {
     navigate('/');
   };
+
+  // Show connection error if Supabase is not accessible
+  if (connectionError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center">
+        <div className="max-w-md mx-auto px-4">
+          <div className="bg-white rounded-2xl p-8 shadow-lg border border-red-200">
+            <div className="text-center">
+              <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Connection Error</h2>
+              <p className="text-gray-600 mb-6">{connectionError}</p>
+              <div className="space-y-3 text-sm text-gray-500">
+                <p>Please check:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Your internet connection</li>
+                  <li>Supabase project status</li>
+                  <li>Project configuration</li>
+                </ul>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 px-6 rounded-xl font-semibold transition-colors"
+              >
+                Retry Connection
+              </button>
+              <button
+                onClick={onBack}
+                className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-semibold transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white">
