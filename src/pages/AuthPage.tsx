@@ -1,56 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Mail, Phone, Eye, EyeOff } from 'lucide-react';
-import { createUserWithEmailAndPassword, RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithRedirect, updateProfile, getRedirectResult } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase/firebaseConfig';
-import { saveUserToFirestore } from '../firebase/firebaseStore';
-import {useAuth} from '../hooks/useAuth'
+import React, { useState } from 'react';
+import { ArrowLeft, Mail, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-// 👇️ Declare recaptchaVerifier on the window object for TypeScript
-declare global {
-  interface Window {
-    recaptchaVerifier: any;
-  }
-}
 
-
-
- function AuthPage() {
+function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
-  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const {login}= useAuth()
-  const navigate = useNavigate()
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
     password: '',
-    otp: ''
   });
-
-  // Check for redirect result on component mount
-  useEffect(() => {
-    const checkRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          const user = result.user;
-          console.log('Google user from redirect:', user);
-          login(user);
-          saveUserToFirestore(user);
-          navigate('/home');
-        }
-      } catch (error) {
-        console.error('Google Sign-In Redirect Error:', error);
-        alert("Google sign-in failed.");
-      }
-    };
-
-    checkRedirectResult();
-  }, [login, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -62,98 +26,62 @@ declare global {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      // Use signInWithRedirect instead of signInWithPopup to avoid popup blockers
-      await signInWithRedirect(auth, googleProvider);
-      // The redirect will handle the rest, so we don't need to do anything else here
+      const { error } = await signInWithGoogle();
+      if (error) {
+        console.error('Google Sign-In Error:', error);
+        alert("Google sign-in failed: " + error.message);
+      }
+      // Redirect will be handled by Supabase
     } catch (error) {
       console.error('Google Sign-In Error:', error);
       alert("Google sign-in failed.");
-      setIsLoading(false);
-    }
-  };
-
-  // ✅ Set up recaptcha before sending OTP
-  const generateRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(
-        'recaptcha-container',
-        {
-          size: 'invisible',
-          callback: (response: any) => {
-            console.log('reCAPTCHA verified');
-          }
-        },
-        auth
-      );
-    }
-  };
-
-  const handlePhoneAuth = async () => {
-    setIsLoading(true);
-    try {
-      if (!otpSent) {
-        generateRecaptcha();
-        const appVerifier = window.recaptchaVerifier;
-
-        const confirmation = await signInWithPhoneNumber(auth, '+917617028576', appVerifier);
-        setConfirmationResult(confirmation);
-        setOtpSent(true);
-        alert('OTP sent to your phone.');
-      } else {
-        const result = await confirmationResult.confirm(formData.otp);
-        const user = result.user;
-        login(user);
-        saveUserToFirestore(user);
-        navigate('/home')
-      }
-    } catch (error) {
-      console.error('Phone auth error:', error);
-      alert('Failed to authenticate. Check phone number or OTP.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleEmailAuth = async () => {
-  setIsLoading(true);
-  const { email, password, name } = formData;
+    setIsLoading(true);
+    const { email, password, name } = formData;
 
-  if (!email || !password) {
-    alert("Email and password are required");
-    setIsLoading(false);
-    return;
-  }
-
-  try {
-    let userCredential;
-
-    if (isLogin) {
-      // Existing user logging in
-      userCredential = await signInWithEmailAndPassword(auth, email, password);
-    } else {
-      // New user registration
-      userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(userCredential.user, {
-        displayName: name || "User",
-      });
+    if (!email || !password) {
+      alert("Email and password are required");
+      setIsLoading(false);
+      return;
     }
 
-    const user = userCredential.user;
-    login(user);
-    saveUserToFirestore(user);
-    navigate('/home')
-    console.log("User authenticated:", user);
-  } catch (error: any) {
-    alert(error.message);
-    console.error("Email auth error:", error);
-  } finally {
-    setIsLoading(false);
-  }
-};
+    if (!isLogin && !name) {
+      alert("Name is required for registration");
+      setIsLoading(false);
+      return;
+    }
 
-const onBack =()=>{
- navigate('/')
-}
+    try {
+      let result;
+
+      if (isLogin) {
+        result = await signInWithEmail(email, password);
+      } else {
+        result = await signUpWithEmail(email, password, name);
+      }
+
+      if (result.error) {
+        alert(result.error.message);
+      } else {
+        navigate('/home');
+      }
+    } catch (error: any) {
+      alert(error.message);
+      console.error("Email auth error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onBack = () => {
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white">
       <header className="bg-white shadow-sm sticky top-0 z-50">
@@ -207,29 +135,6 @@ const onBack =()=>{
           <div className="flex-1 border-t border-gray-200"></div>
         </div>
 
-        <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
-          <button
-            onClick={() => setAuthMethod('email')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-all ${authMethod === 'email'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600'
-              }`}
-          >
-            <Mail className="w-4 h-4 inline mr-2" />
-            Email
-          </button>
-          <button
-            onClick={() => setAuthMethod('phone')}
-            className={`flex-1 py-2 px-4 rounded-md font-medium text-sm transition-all ${authMethod === 'phone'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600'
-              }`}
-          >
-            <Phone className="w-4 h-4 inline mr-2" />
-            Phone
-          </button>
-        </div>
-
         <div className="space-y-4">
           {!isLogin && (
             <div>
@@ -241,87 +146,54 @@ const onBack =()=>{
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="Enter your full name"
               />
             </div>
           )}
 
-          {authMethod === 'email' ? (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg"
-                  placeholder="Enter your email"
-                />
-              </div>
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg pr-12"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg"
-                  placeholder="+91 9876543210"
-                />
-              </div>
-              {otpSent && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Enter OTP</label>
-                  <input
-                    type="text"
-                    name="otp"
-                    value={formData.otp}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg"
-                    placeholder="Enter 6-digit OTP"
-                    maxLength={6}
-                  />
-                </div>
-              )}
-            </>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter your email"
+            />
+          </div>
+
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg pr-12 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter your password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-9 text-gray-500"
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         <button
-          onClick={authMethod === 'email' ? handleEmailAuth : handlePhoneAuth}
+          onClick={handleEmailAuth}
           disabled={isLoading}
-          className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white py-4 px-6 rounded-xl font-semibold mt-6"
+          className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white py-4 px-6 rounded-xl font-semibold mt-6 disabled:opacity-50"
         >
           {isLoading
             ? 'Please wait...'
-            : authMethod === 'phone' && !otpSent
-              ? 'Send OTP'
-              : isLogin
-                ? 'Sign In'
-                : 'Create Account'}
+            : isLogin
+              ? 'Sign In'
+              : 'Create Account'}
         </button>
 
         <div className="text-center mt-6">
@@ -335,13 +207,12 @@ const onBack =()=>{
           </button>
         </div>
 
-        {/* ✅ Recaptcha must be rendered here */}
-        <div id="recaptcha-container" />
-
         <p className="text-xs text-gray-500 text-center mt-6 leading-relaxed">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
       </div>
     </div>
   );
-} export default AuthPage
+}
+
+export default AuthPage;
