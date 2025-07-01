@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Mail, Phone, Eye, EyeOff } from 'lucide-react';
-import { createUserWithEmailAndPassword, RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithRedirect, updateProfile, getRedirectResult } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase/firebaseConfig';
 import { saveUserToFirestore } from '../firebase/firebaseStore';
 import {useAuth} from '../hooks/useAuth'
@@ -31,6 +31,27 @@ declare global {
     otp: ''
   });
 
+  // Check for redirect result on component mount
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const user = result.user;
+          console.log('Google user from redirect:', user);
+          login(user);
+          saveUserToFirestore(user);
+          navigate('/home');
+        }
+      } catch (error) {
+        console.error('Google Sign-In Redirect Error:', error);
+        alert("Google sign-in failed.");
+      }
+    };
+
+    checkRedirectResult();
+  }, [login, navigate]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -41,17 +62,12 @@ declare global {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      console.log('Google user:', user);
-      login(user);
-      saveUserToFirestore(user);
-      navigate('/home')
-
+      // Use signInWithRedirect instead of signInWithPopup to avoid popup blockers
+      await signInWithRedirect(auth, googleProvider);
+      // The redirect will handle the rest, so we don't need to do anything else here
     } catch (error) {
       console.error('Google Sign-In Error:', error);
       alert("Google sign-in failed.");
-    } finally {
       setIsLoading(false);
     }
   };
