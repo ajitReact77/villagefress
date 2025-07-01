@@ -34,6 +34,7 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session?.user);
       
@@ -75,56 +76,108 @@ export function useAuth() {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('Sign in error:', error);
+        return { data: null, error };
+      }
+      
+      console.log('Sign in successful:', data.user?.email);
+      return { data, error: null };
+    } catch (error) {
+      console.error('Sign in exception:', error);
+      return { data: null, error };
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
         },
-      },
-    });
-
-    if (data.user && !error) {
-      // Create user profile
-      await supabase.from('users').insert({
-        id: data.user.id,
-        email: data.user.email!,
-        name,
-        is_admin: false,
       });
-    }
 
-    return { data, error };
+      if (error) {
+        console.error('Sign up error:', error);
+        return { data: null, error };
+      }
+
+      if (data.user && !error) {
+        // Create user profile
+        const { error: profileError } = await supabase.from('users').insert({
+          id: data.user.id,
+          email: data.user.email!,
+          name,
+          is_admin: false,
+        });
+        
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+        }
+      }
+
+      console.log('Sign up successful:', data.user?.email);
+      return { data, error: null };
+    } catch (error) {
+      console.error('Sign up exception:', error);
+      return { data: null, error };
+    }
   };
 
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/home`,
-      },
-    });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/home`,
+        },
+      });
+      
+      if (error) {
+        console.error('Google sign in error:', error);
+        return { data: null, error };
+      }
+      
+      return { data, error: null };
+    } catch (error) {
+      console.error('Google sign in exception:', error);
+      return { data: null, error };
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      setUser(null);
-      setUserProfile(null);
-      setIsAuthenticated(false);
-      setIsAdmin(false);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (!error) {
+        setUser(null);
+        setUserProfile(null);
+        setIsAuthenticated(false);
+        setIsAdmin(false);
+      }
+      return { error };
+    } catch (error) {
+      console.error('Sign out error:', error);
+      return { error };
     }
-    return { error };
+  };
+
+  // Legacy methods for backward compatibility
+  const login = (userData: any) => {
+    console.log('Legacy login method called');
+  };
+
+  const logout = async () => {
+    await signOut();
   };
 
   return {
@@ -137,5 +190,7 @@ export function useAuth() {
     signUpWithEmail,
     signInWithGoogle,
     signOut,
+    login, // Legacy
+    logout, // Legacy
   };
 }

@@ -7,6 +7,7 @@ function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
@@ -21,20 +22,22 @@ function AuthPage() {
       ...formData,
       [e.target.name]: e.target.value
     });
+    setError(''); // Clear error when user types
   };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
+    setError('');
     try {
       const { error } = await signInWithGoogle();
       if (error) {
         console.error('Google Sign-In Error:', error);
-        alert("Google sign-in failed: " + error.message);
+        setError("Google sign-in failed: " + error.message);
       }
       // Redirect will be handled by Supabase
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google Sign-In Error:', error);
-      alert("Google sign-in failed.");
+      setError("Google sign-in failed: " + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -42,16 +45,17 @@ function AuthPage() {
 
   const handleEmailAuth = async () => {
     setIsLoading(true);
+    setError('');
     const { email, password, name } = formData;
 
     if (!email || !password) {
-      alert("Email and password are required");
+      setError("Email and password are required");
       setIsLoading(false);
       return;
     }
 
     if (!isLogin && !name) {
-      alert("Name is required for registration");
+      setError("Name is required for registration");
       setIsLoading(false);
       return;
     }
@@ -66,12 +70,13 @@ function AuthPage() {
       }
 
       if (result.error) {
-        alert(result.error.message);
+        setError(result.error.message);
       } else {
+        console.log('Auth successful, navigating to home');
         navigate('/home');
       }
     } catch (error: any) {
-      alert(error.message);
+      setError(error.message || 'Authentication failed');
       console.error("Email auth error:", error);
     } finally {
       setIsLoading(false);
@@ -114,6 +119,13 @@ function AuthPage() {
               : 'Create your account to start fresh shopping'}
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+        )}
 
         <button
           onClick={handleGoogleLogin}
